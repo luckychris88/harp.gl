@@ -1257,7 +1257,7 @@ export class TileGeometryCreator {
             const mesh = new THREE.Mesh(g, material);
             mesh.renderOrder = renderOrder;
             this.registerTileObject(tile, mesh, GeometryKind.Background);
-            tile.objects.push(mesh);
+            tile.addBackgroundPlane(mesh);
         } else {
             // Add a ground plane to the tile.
             tile.boundingBox.getSize(tmpV);
@@ -1271,7 +1271,7 @@ export class TileGeometryCreator {
             );
 
             this.registerTileObject(tile, groundPlane, GeometryKind.Background);
-            tile.objects.push(groundPlane);
+            tile.addBackgroundPlane(groundPlane);
         }
     }
 
