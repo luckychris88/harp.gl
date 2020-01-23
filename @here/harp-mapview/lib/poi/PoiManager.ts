@@ -9,7 +9,6 @@ import {
     composeTechniqueTextureName,
     DecodedTile,
     getFeatureId,
-    getPropertyValue,
     ImageTexture,
     isLineMarkerTechnique,
     isPoiTechnique,
@@ -20,6 +19,7 @@ import {
 import { ContextualArabicConverter } from "@here/harp-text-canvas";
 import { assert, assertExists, LoggerManager } from "@here/harp-utils";
 import * as THREE from "three";
+import { getNumberPropertyValueSafe } from "../DecodedTileHelpers";
 import { MapView } from "../MapView";
 import { TextElement } from "../text/TextElement";
 import { DEFAULT_TEXT_DISTANCE_SCALE } from "../text/TextElementsRenderer";
@@ -500,23 +500,23 @@ export class PoiManager {
         const displayZoomLevel = this.mapView.zoomLevel;
         const fadeNear =
             technique.fadeNear !== undefined
-                ? getPropertyValue(technique.fadeNear, displayZoomLevel)
-                : technique.fadeNear;
+                ? getNumberPropertyValueSafe(technique.fadeNear, undefined, displayZoomLevel)
+                : undefined;
         const fadeFar =
             technique.fadeFar !== undefined
-                ? getPropertyValue(technique.fadeFar, displayZoomLevel)
-                : technique.fadeFar;
-        const xOffset = getPropertyValue(technique.xOffset, displayZoomLevel);
-        const yOffset = getPropertyValue(technique.yOffset, displayZoomLevel);
+                ? getNumberPropertyValueSafe(technique.fadeFar, undefined, displayZoomLevel)
+                : undefined;
+        const xOffset = getNumberPropertyValueSafe(technique.xOffset, 0, displayZoomLevel);
+        const yOffset = getNumberPropertyValueSafe(technique.yOffset, 0, displayZoomLevel);
 
         const textElement: TextElement = new TextElement(
             ContextualArabicConverter.instance.convert(text),
             positions,
             textElementsRenderer.styleCache.getRenderStyle(tile, technique),
             textElementsRenderer.styleCache.getLayoutStyle(tile, technique),
-            getPropertyValue(priority, displayZoomLevel),
-            xOffset !== undefined ? xOffset : 0.0,
-            yOffset !== undefined ? yOffset : 0.0,
+            getNumberPropertyValueSafe(priority, 0, displayZoomLevel),
+            xOffset,
+            yOffset,
             featureId,
             technique.style,
             fadeNear,

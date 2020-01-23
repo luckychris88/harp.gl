@@ -7,12 +7,11 @@
 import {
     BufferAttribute,
     ColorUtils,
+    Env,
     Expr,
     getPropertyValue,
-    InterpolatedProperty,
     isExtrudedLineTechnique,
     isExtrudedPolygonTechnique,
-    isInterpolatedProperty,
     isJsonExpr,
     isShaderTechnique,
     isStandardTechnique,
@@ -229,7 +228,7 @@ export function createMaterial(
 
     if (isShaderTechnique(technique)) {
         // Special case for ShaderTechnique.
-        applyShaderTechniqueToMaterial(technique, material);
+        applyShaderTechniqueToMaterial(technique, material, options.level);
     } else {
         // Generic technique.
         applyTechniqueToMaterial(technique, material, options.level, options.skipExtraProps);
@@ -417,6 +416,103 @@ export function getMaterialConstructor(technique: Technique): MaterialConstructo
 }
 
 /**
+ * Calculates numerical value of `Value | Expr`.
+ *
+ * Function takes care about color interpolation (when @param zoom is set) as also parsing
+ * string encoded colors.
+ *
+ * Returns `defaultValue` if evaluation result is not `number` or is `NaN`.
+ *
+ * @param value the value of property defined in technique
+ * @param defaultValue return value used if `value` yields invalid result
+ * @param zoomLevel zoom level used for interpolation.
+ * @returns value if property evaluates to `number`, else `defaultValue`
+ */
+export function getNumberPropertyValueSafe<D = number>(
+    property: Value | Expr | undefined,
+    defaultValue: D,
+    envOrLevel: number | Env,
+    pixelToMeters: number = 1.0
+): number | D {
+    if (property === undefined || property === null) {
+        return defaultValue;
+    }
+    const r = getPropertyValue(property, envOrLevel as number, pixelToMeters);
+    return typeof r !== "number" || isNaN(r) ? defaultValue : r;
+}
+
+/**
+ * Calculates the numerical color value of the `Value | Expr` into TTRRGGAA format.
+ *
+ * Function takes care about color interpolation (when @param zoom is set) as also parsing
+ * string encoded colors.
+ *
+ * Evaulates [[Expr]] instances using [[getPropertyValue]] and parses string using
+ * [[parseStringEncodedColor]].
+ *
+ * @param value the value of color property defined in technique
+ * @param defaultValue return value used if `value` yields invalid result
+ * @param zoomLevel zoom level used for interpolation.
+ * @returns color as `number` if property evaluates to proper color, else `defaultValue`
+ */
+export function getColorPropertyValueSafe<D = number>(
+    property: Value | Expr | undefined,
+    defaultValue: D,
+    envOrLevel: number | Env
+): number | D {
+    if (property === undefined || property === null) {
+        return defaultValue;
+    }
+    const evaluated = getPropertyValue(property, envOrLevel as number);
+
+    if (evaluated === undefined || evaluated === null) {
+        return defaultValue;
+    } else if (typeof evaluated === "number") {
+        return evaluated;
+    } else if (typeof evaluated === "string") {
+        const parsed = parseStringEncodedColor(evaluated);
+        if (parsed !== undefined) {
+            return parsed;
+        }
+    }
+
+    logger.error(`Unsupported color format: '${evaluated}'`);
+    return defaultValue;
+}
+
+/**
+ * Calculates numerical value of `Value | Expr` converted to enum value from string.
+ *
+ * Function takes care about color interpolation (when @param zoom is set) and interprets
+ * string value as 'enum key'.
+ *
+ *
+ * Returns `defaultValue` invalid enum key if found
+ *
+ * @param value the value of property defined in technique
+ * @param enumDef enum instance
+ * @param defaultValue return value used if `value` yields invalid result
+ * @param zoomLevel zoom level used for interpolation.
+ * @returns value if property evaluates to `number`, else `defaultValue`
+ */
+export function getEnumPropertyValueSafe<E, D = E>(
+    property: Value | Expr | undefined,
+    enumDef: E,
+    defaultValue: D,
+    envOrLevel: number | Env,
+    pixelToMeters: number = 1.0
+): E[keyof E] | D {
+    if (property === undefined || property === null) {
+        return defaultValue;
+    }
+    const r = getPropertyValue(property, envOrLevel as number, pixelToMeters);
+    if (typeof r === "string" && r in enumDef) {
+        return enumDef[r as keyof E];
+    }
+    return defaultValue;
+}
+
+/**
  * Allows to easy parse/encode technique's base color property value as number coded color.
  *
  * Function takes care about property parsing, interpolation and encoding if neccessary. If
@@ -430,13 +526,9 @@ export function getMaterialConstructor(technique: Technique): MaterialConstructo
  */
 export function evaluateBaseColorProperty(
     technique: Technique,
-    zoomLevel?: number
+    zoomLevel: number
 ): number | undefined {
-    const baseColorProp = getBaseColorProp(technique);
-    if (baseColorProp !== undefined) {
-        return evaluateColorProperty(baseColorProp, zoomLevel);
-    }
-    return undefined;
+    return getColorPropertyValueSafe(getBaseColorProp(technique), undefined, zoomLevel);
 }
 
 /**
@@ -445,7 +537,11 @@ export function evaluateBaseColorProperty(
  * @param technique the [[ShaderTechnique]] which requires special handling
  * @param material material to which technique will be applied
  */
-function applyShaderTechniqueToMaterial(technique: ShaderTechnique, material: THREE.Material) {
+function applyShaderTechniqueToMaterial(
+    technique: ShaderTechnique,
+    material: THREE.Material,
+    zoomLevel: number
+) {
     // The shader technique takes the argument from its `params' member.
     const params = technique.params as { [key: string]: any };
     // Remove base color and transparency properties from the processed set.
@@ -471,13 +567,19 @@ function applyShaderTechniqueToMaterial(technique: ShaderTechnique, material: TH
     props.forEach(propertyName => {
         // TODO: Check if properties values should not be interpolated, possible bug in old code!
         // This behavior is kept in the new version too, level is set to undefined.
-        applyTechniquePropertyToMaterial(material, propertyName, params[propertyName]);
+        applyTechniquePropertyToMaterial(material, propertyName, params[propertyName], zoomLevel);
     });
 
     if (hasBaseColor) {
         const propColor = baseColorPropName as keyof THREE.Material;
         // Finally apply base color and related properties to material (opacity, transparent)
-        applyBaseColorToMaterial(material, material[propColor], technique, params[propColor]);
+        applyBaseColorToMaterial(
+            material,
+            material[propColor],
+            technique,
+            params[propColor],
+            zoomLevel
+        );
     }
 }
 
@@ -566,7 +668,7 @@ function applyTechniquePropertyToMaterial(
     material: THREE.Material,
     propertyName: string,
     techniqueAttrValue: Value,
-    zoomLevel?: number
+    zoomLevel: number
 ) {
     const m = material as any;
     if (m[propertyName] instanceof THREE.Color) {
@@ -576,7 +678,10 @@ function applyTechniquePropertyToMaterial(
             zoomLevel
         );
     } else {
-        m[propertyName] = evaluateProperty(techniqueAttrValue, zoomLevel);
+        const v = getPropertyValue(techniqueAttrValue, zoomLevel);
+        if (v !== null) {
+            m[propertyName] = v;
+        }
     }
 }
 
@@ -595,10 +700,13 @@ function applyTechniquePropertyToMaterial(
  */
 export function applySecondaryColorToMaterial(
     materialColor: THREE.Color,
-    techniqueColor: Value | Expr | InterpolatedProperty,
-    zoomLevel?: number
+    techniqueColor: Value | Expr | undefined,
+    zoomLevel: number
 ) {
-    let value = evaluateColorProperty(techniqueColor, zoomLevel);
+    let value = getColorPropertyValueSafe(techniqueColor, undefined, zoomLevel);
+    if (value === undefined) {
+        return;
+    }
 
     if (ColorUtils.hasAlphaInHex(value)) {
         logger.warn("Used RGBA value for technique color without transparency support!");
@@ -631,10 +739,13 @@ export function applyBaseColorToMaterial(
     material: THREE.Material,
     materialColor: THREE.Color,
     technique: Technique,
-    techniqueColor: Value,
-    zoomLevel?: number
+    techniqueColor: Value | Expr | undefined,
+    zoomLevel: number
 ) {
-    const colorValue = evaluateColorProperty(techniqueColor, zoomLevel);
+    const colorValue = getColorPropertyValueSafe(techniqueColor, undefined, zoomLevel);
+    if (colorValue === undefined) {
+        return;
+    }
 
     const { r, g, b, a } = ColorUtils.getRgbaFromHex(colorValue);
     // Override material opacity and blending by mixing technique defined opacity
@@ -642,7 +753,7 @@ export function applyBaseColorToMaterial(
     const tech = technique as any;
     let opacity = a;
     if (tech.opacity !== undefined) {
-        opacity *= evaluateProperty(tech.opacity, zoomLevel);
+        opacity *= getNumberPropertyValueSafe(tech.opacity, 1, zoomLevel);
     }
 
     opacity = THREE.Math.clamp(opacity, 0, 1);
@@ -655,50 +766,6 @@ export function applyBaseColorToMaterial(
     } else {
         disableBlending(material);
     }
-}
-
-/**
- * Calculates the value of the technique defined property.
- *
- * Function takes care about property interpolation (when @param zoom is set) as also parsing
- * string encoded numbers.
- *
- * @note Use with care, because function does not recognize property type.
- * @param value the value of color property defined in technique
- * @param zoomLevel zoom level used for interpolation.
- */
-function evaluateProperty(value: any, zoomLevel?: number): any {
-    if (zoomLevel !== undefined && (isInterpolatedProperty(value) || Expr.isExpr(value))) {
-        value = getPropertyValue(value, zoomLevel);
-    }
-    return value;
-}
-
-/**
- * Calculates the numerical value of the technique defined color property.
- *
- * Function takes care about color interpolation (when @param zoom is set) as also parsing
- * string encoded colors.
- *
- * @note Use with care, because function does not recognize property type.
- * @param value the value of color property defined in technique
- * @param zoomLevel zoom level used for interpolation.
- */
-export function evaluateColorProperty(value: Value, zoomLevel?: number): number {
-    value = evaluateProperty(value, zoomLevel);
-
-    if (typeof value === "number") {
-        return value;
-    }
-
-    if (typeof value === "string") {
-        const parsed = parseStringEncodedColor(value);
-        if (parsed !== undefined) {
-            return parsed;
-        }
-    }
-
-    throw new Error(`Unsupported color format: '${value}'`);
 }
 
 /**
@@ -732,7 +799,7 @@ export function compileTechniques(techniques: Technique[]) {
  * @param technique The techniqe where we seach for base color property.
  * @returns The value of technique color used to apply transparency.
  */
-function getBaseColorProp(technique: Technique): any {
+function getBaseColorProp(technique: Technique): Value | Expr | undefined {
     const baseColorPropName = getBaseColorPropName(technique);
     if (baseColorPropName !== undefined) {
         if (!isShaderTechnique(technique)) {

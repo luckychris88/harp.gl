@@ -30,7 +30,10 @@ const DEPTH_PRE_PASS_RENDER_ORDER_OFFSET = 1e-6;
  *
  * @param technique [[BaseStandardTechnique]] instance to be checked
  */
-export function isRenderDepthPrePassEnabled(technique: ExtrudedPolygonTechnique) {
+export function isRenderDepthPrePassEnabled(
+    technique: ExtrudedPolygonTechnique,
+    zoomLevel: number
+) {
     // Depth pass explicitly disabled
     if (technique.enableDepthPrePass === false) {
         return false;
@@ -43,7 +46,7 @@ export function isRenderDepthPrePassEnabled(technique: ExtrudedPolygonTechnique)
     if (!transparent) {
         // We do not support switching depth pass during alpha interpolation, ignore zoom level
         // when calculating base color value.
-        const color = evaluateBaseColorProperty(technique);
+        const color = evaluateBaseColorProperty(technique, zoomLevel);
         if (color !== undefined) {
             const alpha = ColorUtils.getAlphaFromHex(color);
             transparent = alpha > 0.0 && alpha < 1.0;

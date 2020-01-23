@@ -6,7 +6,6 @@
 
 import {
     DecodedTile,
-    getPropertyValue,
     isPoiTechnique,
     isTextTechnique,
     PoiGeometry,
@@ -18,6 +17,7 @@ import {
 import {
     DEFAULT_TEXT_DISTANCE_SCALE,
     getBufferAttribute,
+    getNumberPropertyValueSafe,
     TextElement,
     Tile,
     TileObject
@@ -227,7 +227,7 @@ export class GeoJsonTile extends Tile {
             path,
             styleCache.getRenderStyle(this, technique),
             styleCache.getLayoutStyle(this, technique),
-            getPropertyValue(priority, this.mapView.zoomLevel),
+            getNumberPropertyValueSafe(priority, 0, this.mapView.zoomLevel),
             xOffset,
             yOffset,
             featureId
@@ -308,7 +308,7 @@ export class GeoJsonTile extends Tile {
             position,
             styleCache.getRenderStyle(this, technique),
             styleCache.getLayoutStyle(this, technique),
-            getPropertyValue(priority, this.mapView.zoomLevel),
+            getNumberPropertyValueSafe(priority, 0, this.mapView.zoomLevel),
             xOffset,
             yOffset,
             featureId
@@ -377,8 +377,16 @@ export class GeoJsonTile extends Tile {
         const label = DEFAULT_LABELED_ICON.label;
         const priority =
             technique.priority === undefined ? DEFAULT_LABELED_ICON.priority : technique.priority;
-        const xOffset = getPropertyValue(technique.xOffset, zoomLevel);
-        const yOffset = getPropertyValue(technique.yOffset, zoomLevel);
+        const xOffset = getNumberPropertyValueSafe(
+            technique.xOffset,
+            DEFAULT_LABELED_ICON.xOffset,
+            zoomLevel
+        );
+        const yOffset = getNumberPropertyValueSafe(
+            technique.yOffset,
+            DEFAULT_LABELED_ICON.yOffset,
+            zoomLevel
+        );
 
         const featureId = DEFAULT_LABELED_ICON.featureId;
 
@@ -388,9 +396,9 @@ export class GeoJsonTile extends Tile {
             position,
             styleCache.getRenderStyle(this, technique),
             styleCache.getLayoutStyle(this, technique),
-            getPropertyValue(priority, this.mapView.zoomLevel),
-            xOffset === undefined ? DEFAULT_LABELED_ICON.xOffset : xOffset,
-            yOffset === undefined ? DEFAULT_LABELED_ICON.yOffset : yOffset,
+            getNumberPropertyValueSafe(priority, 0, this.mapView.zoomLevel),
+            xOffset,
+            yOffset,
             featureId
         );
 

@@ -6,7 +6,6 @@
 
 import {
     ColorUtils,
-    getPropertyValue,
     IndexedTechniqueParams,
     LineMarkerTechnique,
     PoiTechnique,
@@ -31,7 +30,11 @@ import {
 } from "@here/harp-text-canvas";
 import { getOptionValue, LoggerManager } from "@here/harp-utils";
 import { ColorCache } from "../ColorCache";
-import { evaluateColorProperty } from "../DecodedTileHelpers";
+import {
+    getColorPropertyValueSafe,
+    getEnumPropertyValueSafe,
+    getNumberPropertyValueSafe
+} from "../DecodedTileHelpers";
 import { PoiRenderer } from "../poi/PoiRenderer";
 import { Tile } from "../Tile";
 import { TextCanvasRenderer } from "./TextCanvasRenderer";
@@ -171,6 +174,7 @@ export interface TextElementStyle {
 export class TextStyleCache {
     private m_textRenderStyleCache = new TextRenderStyleCache();
     private m_textLayoutStyleCache = new TextLayoutStyleCache();
+
     private m_textStyles: Map<string, TextElementStyle> = new Map();
     private m_defaultStyle: TextElementStyle = {
         name: DEFAULT_STYLE_NAME,
@@ -303,25 +307,22 @@ export class TextStyleCache {
         const mapView = tile.mapView;
         const dataSource = tile.dataSource;
         const zoomLevel = mapView.zoomLevel;
-        const zoomLevelInt = Math.floor(zoomLevel);
+        const floorZoomLevel = Math.floor(zoomLevel);
 
-        const cacheId = computeStyleCacheId(dataSource.name, technique, zoomLevelInt);
+        const cacheId = computeStyleCacheId(dataSource.name, technique, floorZoomLevel);
         let renderStyle = this.m_textRenderStyleCache.get(cacheId);
         if (renderStyle === undefined) {
             const defaultRenderParams = this.m_defaultStyle.renderParams;
 
-            // Sets opacity to 1.0 if default and technique attribute are undefined.
-            const defaultOpacity = getOptionValue(defaultRenderParams.opacity, 1.0);
-            // Interpolate opacity but only on discreet zoom levels (step interpolation).
-            let opacity = getPropertyValue(
-                getOptionValue(technique.opacity, defaultOpacity),
-                zoomLevelInt
+            let opacity = getNumberPropertyValueSafe(
+                technique.opacity,
+                getOptionValue(defaultRenderParams.opacity, 1),
+                floorZoomLevel
             );
 
             let color: THREE.Color | undefined;
-            // Store color (RGB) in cache and multiply opacity value with the color alpha channel.
-            if (technique.color !== undefined) {
-                let hexColor = evaluateColorProperty(technique.color, zoomLevelInt);
+            let hexColor = getColorPropertyValueSafe(technique.color, undefined, floorZoomLevel);
+            if (hexColor !== undefined) {
                 if (ColorUtils.hasAlphaInHex(hexColor)) {
                     const alpha = ColorUtils.getAlphaFromHex(hexColor);
                     opacity = opacity * alpha;
@@ -330,41 +331,36 @@ export class TextStyleCache {
                 color = ColorCache.instance.getColor(hexColor);
             }
 
-            // Sets background size to 0.0 if default and technique attribute is undefined.
-            const defaultBackgroundSize = getOptionValue(
-                defaultRenderParams.fontSize!.backgroundSize,
-                0
+            const backgroundSize = getNumberPropertyValueSafe(
+                technique.backgroundSize,
+                getOptionValue(defaultRenderParams.fontSize!.backgroundSize, 0),
+                floorZoomLevel
             );
-            const backgroundSize = getPropertyValue(
-                getOptionValue(technique.backgroundSize, defaultBackgroundSize),
-                zoomLevelInt
-            );
-
             const hasBackgroundDefined =
                 technique.backgroundColor !== undefined &&
                 technique.backgroundSize !== undefined &&
                 backgroundSize > 0;
 
+            let hexBgColor = getColorPropertyValueSafe(
+                technique.backgroundColor,
+                undefined,
+                floorZoomLevel
+            );
+
             // Sets background opacity to 1.0 if default and technique value is undefined while
             // background size and color is specified, otherwise set value in default render
             // params or 0.0 if neither set. Makes label opaque when backgroundColor and
             // backgroundSize are set.
-            const defaultBackgroundOpacity = getOptionValue(
-                defaultRenderParams.backgroundOpacity,
-                0.0
-            );
-            let backgroundOpacity = getPropertyValue(
-                getOptionValue(
-                    technique.backgroundOpacity,
-                    hasBackgroundDefined ? 1.0 : defaultBackgroundOpacity
-                ),
-                zoomLevelInt
+            let backgroundOpacity = getNumberPropertyValueSafe(
+                technique.backgroundOpacity,
+                hasBackgroundDefined
+                    ? 1.0
+                    : getOptionValue(defaultRenderParams.backgroundOpacity, 0.0),
+                floorZoomLevel
             );
 
             let backgroundColor: THREE.Color | undefined;
-            // Store background color (RGB) in cache and multiply backgroundOpacity by its alpha.
-            if (technique.backgroundColor !== undefined) {
-                let hexBgColor = evaluateColorProperty(technique.backgroundColor, zoomLevelInt);
+            if (hexBgColor !== undefined) {
                 if (ColorUtils.hasAlphaInHex(hexBgColor)) {
                     const alpha = ColorUtils.getAlphaFromHex(hexBgColor);
                     backgroundOpacity = backgroundOpacity * alpha;
@@ -377,9 +373,10 @@ export class TextStyleCache {
                 fontName: getOptionValue(technique.fontName, defaultRenderParams.fontName),
                 fontSize: {
                     unit: FontUnit.Pixel,
-                    size: getPropertyValue(
-                        getOptionValue(technique.size, defaultRenderParams.fontSize!.size),
-                        zoomLevelInt
+                    size: getNumberPropertyValueSafe(
+                        technique.size,
+                        defaultRenderParams.fontSize!.size,
+                        floorZoomLevel
                     ),
                     backgroundSize
                 },
@@ -397,17 +394,11 @@ export class TextStyleCache {
                         ? FontVariant[technique.fontVariant]
                         : defaultRenderParams.fontVariant,
                 rotation: getOptionValue(technique.rotation, defaultRenderParams.rotation),
-                color: getOptionValue(
-                    color,
-                    getOptionValue(defaultRenderParams.color, DefaultTextStyle.DEFAULT_COLOR)
-                ),
-                backgroundColor: getOptionValue(
-                    backgroundColor,
-                    getOptionValue(
-                        defaultRenderParams.backgroundColor,
-                        DefaultTextStyle.DEFAULT_BACKGROUND_COLOR
-                    )
-                ),
+                color: color || defaultRenderParams.color || DefaultTextStyle.DEFAULT_COLOR,
+                backgroundColor:
+                    backgroundColor ||
+                    defaultRenderParams.backgroundColor ||
+                    DefaultTextStyle.DEFAULT_BACKGROUND_COLOR,
                 opacity,
                 backgroundOpacity
             };
@@ -441,49 +432,68 @@ export class TextStyleCache {
         if (layoutStyle === undefined) {
             const defaultLayoutParams = this.m_defaultStyle.layoutParams;
 
-            const hAlignment = getPropertyValue(technique.hAlignment, floorZoomLevel) as
-                | string
-                | undefined;
-            const vAlignment = getPropertyValue(technique.vAlignment, floorZoomLevel) as
-                | string
-                | undefined;
-            const wrapping = getPropertyValue(technique.wrappingMode, floorZoomLevel) as
-                | string
-                | undefined;
+            const horizontalAlignment = getEnumPropertyValueSafe(
+                technique.hAlignment,
+                HorizontalAlignment,
+                getOptionValue(
+                    defaultLayoutParams.horizontalAlignment,
+                    DefaultTextStyle.DEFAULT_HORIZONTAL_ALIGNMENT
+                ),
+                floorZoomLevel
+            );
+            const verticalAlignment = getEnumPropertyValueSafe(
+                technique.vAlignment,
+                VerticalAlignment,
+                getOptionValue(
+                    defaultLayoutParams.verticalAlignment,
+                    DefaultTextStyle.DEFAULT_VERTICAL_ALIGNMENT
+                ),
+                floorZoomLevel
+            );
 
-            const horizontalAlignment: HorizontalAlignment | undefined =
-                hAlignment === "Left" || hAlignment === "Center" || hAlignment === "Right"
-                    ? HorizontalAlignment[hAlignment]
-                    : defaultLayoutParams.horizontalAlignment;
+            const wrappingMode = getEnumPropertyValueSafe(
+                technique.wrappingMode,
+                WrappingMode,
+                getOptionValue(
+                    defaultLayoutParams.wrappingMode,
+                    DefaultTextStyle.DEFAULT_WRAPPING_MODE
+                ),
 
-            const verticalAlignment: VerticalAlignment | undefined =
-                vAlignment === "Above" || vAlignment === "Center" || vAlignment === "Below"
-                    ? VerticalAlignment[vAlignment]
-                    : defaultLayoutParams.verticalAlignment;
+                floorZoomLevel
+            );
 
             const layoutParams = {
-                tracking:
-                    getPropertyValue(technique.tracking, floorZoomLevel) ??
+                tracking: getNumberPropertyValueSafe(
+                    technique.tracking,
                     defaultLayoutParams.tracking,
-                leading:
-                    getPropertyValue(technique.leading, floorZoomLevel) ??
+                    floorZoomLevel
+                ),
+                leading: getNumberPropertyValueSafe(
+                    technique.leading,
                     defaultLayoutParams.leading,
-                maxLines:
-                    getPropertyValue(technique.maxLines, floorZoomLevel) ??
+                    floorZoomLevel
+                ),
+                maxLines: getNumberPropertyValueSafe(
+                    technique.maxLines,
                     defaultLayoutParams.maxLines,
-                lineWidth:
-                    getPropertyValue(technique.lineWidth, floorZoomLevel) ??
+                    floorZoomLevel
+                ),
+                lineWidth: getNumberPropertyValueSafe(
+                    technique.lineWidth,
                     defaultLayoutParams.lineWidth,
-                canvasRotation:
-                    getPropertyValue(technique.canvasRotation, floorZoomLevel) ??
+                    floorZoomLevel
+                ),
+                canvasRotation: getNumberPropertyValueSafe(
+                    technique.canvasRotation,
                     defaultLayoutParams.canvasRotation,
-                lineRotation:
-                    getPropertyValue(technique.lineRotation, floorZoomLevel) ??
+                    floorZoomLevel
+                ),
+                lineRotation: getNumberPropertyValueSafe(
+                    technique.lineRotation,
                     defaultLayoutParams.lineRotation,
-                wrappingMode:
-                    wrapping === "None" || wrapping === "Character" || wrapping === "Word"
-                        ? WrappingMode[wrapping]
-                        : defaultLayoutParams.wrappingMode,
+                    floorZoomLevel
+                ),
+                wrappingMode,
                 horizontalAlignment,
                 verticalAlignment
             };
