@@ -51,6 +51,20 @@ export interface ThemeLoadOptions {
     resolveDefinitions?: boolean;
 
     /**
+     * Resolve the URIs to resources like fonts, icons, ...
+     * If true, [[uriResolver]] will be used to resolve the URI
+     * @default true
+     */
+    resolveResourceURIs?: boolean;
+
+    /**
+     * Resolve the URIs of inherited themes (using `extends` feature).
+     * If true, [[uriResolver]] will be used to resolve the URI
+     * @default true
+     */
+    resolveIncludeURIs?: boolean;
+
+    /**
      * An `AbortSignal` object instance; allows you to communicate with a loading process
      * (including fetch requests) request and abort it if desired via an `AbortController`.
      *
@@ -113,18 +127,17 @@ export class ThemeLoader {
         if (typeof theme === "string") {
             const uriResolver = options.uriResolver;
             const themeUrl = uriResolver !== undefined ? uriResolver.resolveUri(theme) : theme;
-
             const response = await fetch(themeUrl, { signal: options.signal });
             if (!response.ok) {
                 throw new Error(`ThemeLoader#load: cannot load theme: ${response.statusText}`);
             }
             theme = (await response.json()) as Theme;
             theme.url = resolveReferenceUri(getAppBaseUrl(), themeUrl);
-            theme = this.resolveUrls(theme, uriResolver);
+            theme = this.resolveUrls(theme, uriResolver, options);
         } else if (theme.url === undefined) {
             // assume that theme url is same as baseUrl
             theme.url = getAppBaseUrl();
-            theme = this.resolveUrls(theme, options.uriResolver);
+            theme = this.resolveUrls(theme, options.uriResolver, options);
         }
 
         if (theme === null || theme === undefined) {
@@ -176,7 +189,11 @@ export class ThemeLoader {
      *
      * @param theme The [[Theme]] to resolve.
      */
-    static resolveUrls(theme: Theme | FlatTheme, uriResolver?: UriResolver): Theme {
+    static resolveUrls(
+        theme: Theme | FlatTheme,
+        uriResolver?: UriResolver,
+        options?: ThemeLoadOptions
+    ): Theme {
         // Ensure that all resources referenced in theme by relative URIs are in fact relative to
         // theme.
         if (theme.url === undefined) {
@@ -188,7 +205,8 @@ export class ThemeLoader {
             new RelativeUriResolver(theme.url)
         );
 
-        if (theme.extends) {
+        const resolveIncludes = options === undefined || !(options.resolveIncludeURIs === false);
+        if (theme.extends && resolveIncludes) {
             theme.extends = (Array.isArray(theme.extends) ? theme.extends : [theme.extends]).map(
                 baseTheme => {
                     if (typeof baseTheme === "string") {
@@ -203,6 +221,11 @@ export class ThemeLoader {
                     }
                 }
             );
+        }
+
+        const resolveResources = options === undefined || !(options.resolveResourceURIs === false);
+        if (!resolveResources) {
+            return theme;
         }
 
         if (theme.sky && theme.sky.type === "cubemap") {
