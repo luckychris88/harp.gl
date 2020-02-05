@@ -6,12 +6,8 @@
 
 import { LineCaps, LineDashes } from "@here/harp-datasource-protocol";
 import * as THREE from "three";
-import {
-    DisplacementFeature,
-    DisplacementFeatureParameters,
-    FadingFeature,
-    FadingFeatureParameters
-} from "./MapMeshMaterials";
+import { DisplacementFeature, DisplacementFeatureParameters } from "./DisplacementFeature";
+import { FadingFeature, FadingFeatureParameters } from "./MapMeshMaterials";
 import linesShaderChunk, { LineCapsModes } from "./ShaderChunks/LinesChunks";
 import {
     enforceBlending,
@@ -546,6 +542,7 @@ export class SolidLineMaterial extends THREE.RawShaderMaterial
      * Overrides THREE.Material.fog flag to add support for custom shader.
      *
      * @param enable Whether we want to enable the fog.
+     * @override
      */
     set fog(enable: boolean) {
         this.m_fog = enable;
@@ -559,6 +556,7 @@ export class SolidLineMaterial extends THREE.RawShaderMaterial
 
     /**
      * Checks if fog is enabled.
+     * @override
      */
     get fog(): boolean {
         return this.m_fog && getShaderMaterialDefine(this, "USE_FOG") === true;
@@ -582,10 +580,12 @@ export class SolidLineMaterial extends THREE.RawShaderMaterial
 
     /**
      * Line opacity.
+     * @override
      */
     get opacity(): number {
         return this.m_opacity;
     }
+    /** @override */
     set opacity(value: number) {
         this.m_opacity = value;
         // Setting opacity before uniform being created requires late invalidation,
@@ -746,6 +746,11 @@ export class SolidLineMaterial extends THREE.RawShaderMaterial
             this.uniforms.displacementMap.value.needsUpdate = true;
         }
         setShaderMaterialDefine(this, "USE_DISPLACEMENTMAP", useDisplacementMap);
+    }
+
+    /** @override */
+    setDisplacementMap(map: THREE.Texture | undefined) {
+        this.displacementMap = map;
     }
 
     get drawRangeStart(): number {

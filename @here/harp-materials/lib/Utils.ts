@@ -6,6 +6,7 @@
 
 import { assert } from "@here/harp-utils";
 import * as THREE from "three";
+import { DisplacementFeature } from "./DisplacementFeature";
 
 /**
  * Values for boolean shader defines
