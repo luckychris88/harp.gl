@@ -16,6 +16,7 @@ import * as THREE from "three";
 import { AnimatedExtrusionTileHandler } from "./AnimatedExtrusionHandler";
 import { CopyrightInfo } from "./copyrights/CopyrightInfo";
 import { DataSource } from "./DataSource";
+import { LodMesh } from "./geometry/LodMesh";
 import { TileGeometryLoader } from "./geometry/TileGeometryLoader";
 import { MapView } from "./MapView";
 import { PathBlockingElement } from "./PathBlockingElement";
@@ -1013,6 +1014,18 @@ export class Tile implements CachedResource {
      */
     computeWorldOffsetX(): number {
         return this.projection.worldExtent(0, 0).max.x * this.offset;
+    }
+
+    /**
+     * Update tile for current map view zoom level
+     * @param zoomLevel Zoom level of the map view
+     */
+    update(zoomLevel: number): void {
+        for (const object of this.objects) {
+            if (object instanceof LodMesh) {
+                object.setLevelOfDetail(zoomLevel - this.tileKey.level);
+            }
+        }
     }
 
     private computeResourceInfo(): void {
