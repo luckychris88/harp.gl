@@ -6,8 +6,12 @@
 
 import { CallExpr, ExprScope, LiteralExpr, NumberLiteralExpr, Value } from "../Expr";
 import { ExprEvaluatorContext, OperatorDescriptorMap } from "../ExprEvaluator";
-import { createInterpolatedProperty, getPropertyValue } from "../InterpolatedProperty";
-import { InterpolatedProperty, InterpolatedPropertyDefinition } from "../InterpolatedPropertyDefs";
+import {
+    createInterpolatedProperty,
+    getPropertyValue,
+    InterpolatedProperty
+} from "../InterpolatedProperty";
+import { InterpolatedPropertyDefinition } from "../InterpolatedPropertyDefs";
 
 type InterpolateCallExpr = CallExpr & {
     _mode?: InterpolatedPropertyDefinition<any>["interpolation"];
