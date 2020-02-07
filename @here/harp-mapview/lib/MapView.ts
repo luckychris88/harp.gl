@@ -750,7 +750,7 @@ export class MapView extends THREE.EventDispatcher {
     private m_enablePolarDataSource: boolean = true;
 
     // gestures
-    private readonly m_raycaster = new PickingRaycaster(this);
+    private readonly m_raycaster: PickingRaycaster;
     private readonly m_plane = new THREE.Plane(new THREE.Vector3(0, 0, 1));
     private readonly m_sphere = new THREE.Sphere(undefined, EarthConstants.EQUATORIAL_RADIUS);
 
@@ -957,6 +957,8 @@ export class MapView extends THREE.EventDispatcher {
         // setup camera with initial position
         this.setupCamera(options);
         this.m_targetDistance = this.m_camera.position.distanceTo(this.m_targetWorldPos);
+
+        this.m_raycaster = new PickingRaycaster(width, height);
 
         this.m_movementDetector = new CameraMovementDetector(
             this.m_options.movementThrottleTimeout,
