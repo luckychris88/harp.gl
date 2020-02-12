@@ -8,7 +8,7 @@ import { CallExpr, ExprScope, LiteralExpr, NumberLiteralExpr, Value } from "../E
 import { ExprEvaluatorContext, OperatorDescriptorMap } from "../ExprEvaluator";
 import {
     createInterpolatedProperty,
-    getPropertyValue,
+    evaluateInterpolatedProperty,
     InterpolatedProperty
 } from "../InterpolatedProperty";
 import { InterpolatedPropertyDefinition } from "../InterpolatedPropertyDefs";
@@ -317,7 +317,7 @@ const operators = {
                 }
             }
 
-            return getPropertyValue(interpolatedProperty, context.env);
+            return evaluateInterpolatedProperty(interpolatedProperty, context.env);
         }
     },
     step: {
@@ -360,7 +360,7 @@ const operators = {
                 }
             }
 
-            return getPropertyValue(interpolatedProperty, context.env);
+            return evaluateInterpolatedProperty(interpolatedProperty, context.env);
         }
     }
 };

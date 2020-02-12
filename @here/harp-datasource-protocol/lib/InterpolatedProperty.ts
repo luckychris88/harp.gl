@@ -115,10 +115,7 @@ const dynamicPropertiesTempEnv = new MapEnv({
  * @param property Property of a technique.
  * @param env The [[Env]] used to evaluate the property.
  */
-export function getPropertyValue(
-    property: Value | Expr | InterpolatedProperty | undefined,
-    env: Env
-): any;
+export function getPropertyValue(property: Value | Expr | undefined, env: Env): any;
 
 /**
  * Get the value of the specified property at the given zoom level.
@@ -130,17 +127,17 @@ export function getPropertyValue(
  *
  */
 export function getPropertyValue(
-    property: Value | Expr | InterpolatedProperty | undefined,
+    property: Value | Expr | undefined,
     level: number,
     pixelToMeters?: number
 ): any;
 
 export function getPropertyValue(
-    property: Value | Expr | InterpolatedProperty | undefined,
+    property: Value | Expr | undefined,
     envOrLevel: number | Env,
     pixelToMeters: number = 1.0
 ): any {
-    if (Expr.isExpr(property) || isInterpolatedProperty(property)) {
+    if (Expr.isExpr(property)) {
         let env: Env;
 
         if (typeof envOrLevel === "number") {
@@ -151,11 +148,7 @@ export function getPropertyValue(
             env = envOrLevel;
         }
 
-        if (Expr.isExpr(property)) {
-            return property.evaluate(env, ExprScope.Dynamic);
-        } else {
-            return evaluateInterpolatedProperty(property, env);
-        }
+        return property.evaluate(env, ExprScope.Dynamic);
     }
 
     // Non-interpolated property parsing
