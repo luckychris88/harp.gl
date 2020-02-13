@@ -107,6 +107,26 @@ export interface Theme {
      * Optional list of [[ThemePoiTableDef]]s.
      */
     poiTables?: PoiTableRef[];
+
+    /**
+     * Optional list of symbolc technique priorities.
+     */
+    priorities?: TechniquePriority[];
+}
+
+/**
+ * A type representing symbolic render orders.
+ */
+export interface TechniquePriority {
+    /**
+     * The group of this priority.
+     */
+    group?: string;
+
+    /**
+     * The category of this priority.
+     */
+    category: string;
 }
 
 /**

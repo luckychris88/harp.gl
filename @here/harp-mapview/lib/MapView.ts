@@ -1274,6 +1274,10 @@ export class MapView extends THREE.EventDispatcher {
 
         this.resetTextRenderer();
 
+        if (Array.isArray(theme.priorities)) {
+            this.m_theme.priorities = theme.priorities;
+        }
+
         if (this.m_theme.styles === undefined) {
             this.m_theme.styles = {};
         }

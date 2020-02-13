@@ -690,6 +690,36 @@ export class TileGeometryCreator {
                 const hasSolidLinesOutlines: boolean =
                     isSolidLineTechnique(technique) && technique.secondaryWidth !== undefined;
 
+                const theme = mapView.theme;
+
+                if ((technique as any)._styleSet !== undefined && Array.isArray(theme.priorities)) {
+                    const styleSetGroup = (technique as any)._styleSet;
+
+                    if (typeof technique.category === "string") {
+                        const priority = theme.priorities.findIndex(
+                            entry =>
+                                (entry.group === undefined || entry.group === styleSetGroup) &&
+                                entry.category === technique.category
+                        );
+
+                        if (priority !== -1) {
+                            technique.renderOrder = priority;
+                        }
+                    }
+
+                    if (typeof (technique as any).secondaryCategory === "string") {
+                        const priority = theme.priorities.findIndex(
+                            entry =>
+                                (entry.group === undefined || entry.group === styleSetGroup) &&
+                                entry.category === (technique as any).secondaryCategory
+                        );
+
+                        if (priority !== -1) {
+                            (technique as any).secondaryRenderOrder = priority;
+                        }
+                    }
+                }
+
                 const object = new ObjectCtor(bufferGeometry, material);
                 object.renderOrder = technique.renderOrder!;
 
