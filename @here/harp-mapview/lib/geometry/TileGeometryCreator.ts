@@ -162,6 +162,8 @@ export class TileGeometryCreator {
                 continue;
             }
 
+            // Technique is enabled only if enabled kinds set is defined and it belongs to set or
+            // if thats not the case, if disabled kinds are undefined or it does not belong to disabled set.
             technique.enabled =
                 !(disabledKinds !== undefined && disabledKinds.hasOrIntersects(technique.kind)) ||
                 (enabledKinds !== undefined && enabledKinds.hasOrIntersects(technique.kind));

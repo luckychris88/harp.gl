@@ -155,6 +155,8 @@ export class SimpleTileGeometryLoader implements TileGeometryLoader {
     private m_decodedTile?: DecodedTile;
     private m_isFinished: boolean = false;
     private m_availableGeometryKinds: GeometryKindSet | undefined;
+    private m_enabledKinds: GeometryKindSet | undefined;
+    private m_disabledKinds: GeometryKindSet | undefined;
     private m_timeout: any;
 
     constructor(private m_tile: Tile) {}
@@ -165,6 +167,10 @@ export class SimpleTileGeometryLoader implements TileGeometryLoader {
 
     get isFinished(): boolean {
         return this.m_isFinished;
+    }
+
+    get isLoading(): boolean {
+        return this.m_timeout !== undefined;
     }
 
     get basicGeometryLoaded(): boolean {
@@ -204,8 +210,21 @@ export class SimpleTileGeometryLoader implements TileGeometryLoader {
     ): void {
         const tile = this.tile;
 
+        // Geometry kinds have changed if so reset entire loading thus this geometry creator
+        // generates all geometry at once.
+        if (!this.compareGeometryKinds(enabledKinds, disabledKinds)) {
+            this.reset();
+
+            if (enabledKinds !== undefined) {
+                this.m_enabledKinds = Object.assign(new GeometryKindSet(), enabledKinds);
+            }
+            if (disabledKinds !== undefined) {
+                this.m_disabledKinds = Object.assign(new GeometryKindSet(), disabledKinds);
+            }
+        }
+
         // First time this tile is handled:
-        if (this.m_decodedTile === undefined && tile.decodedTile !== undefined) {
+        if (this.m_decodedTile === undefined && tile.decodedTile !== undefined && !this.isLoading) {
             TileGeometryCreator.instance.processTechniques(
                 tile.decodedTile,
                 enabledKinds,
@@ -215,10 +234,14 @@ export class SimpleTileGeometryLoader implements TileGeometryLoader {
             this.setDecodedTile(tile.decodedTile);
             this.prepareForRender(enabledKinds, disabledKinds);
         }
+        // TODO: Otherwise we could also check for tile disposal, invisibility moving the block
+        // prepareForRender
+
     }
 
     dispose(): void {
         this.m_decodedTile = undefined;
+        // TODO: Release other resource: availableGeometryKind, enabled/disabled sets, timeout?
     }
 
     reset(): void {
@@ -227,12 +250,18 @@ export class SimpleTileGeometryLoader implements TileGeometryLoader {
         if (this.m_availableGeometryKinds !== undefined) {
             this.m_availableGeometryKinds.clear();
         }
+        this.m_enabledKinds = undefined;
+        this.m_disabledKinds = undefined;
+
         if (this.m_timeout !== undefined) {
             clearTimeout(this.m_timeout);
+            this.m_timeout = undefined;
         }
     }
 
     private finish() {
+        // TODO: Would be easier to set m_decodedTile = undefined, then isLoading would check its
+        // value and if m_timeout is set.
         this.m_tile.loadingFinished();
         this.m_tile.removeDecodedTile();
         this.m_isFinished = true;
@@ -246,14 +275,31 @@ export class SimpleTileGeometryLoader implements TileGeometryLoader {
         enabledKinds: GeometryKindSet | undefined,
         disabledKinds: GeometryKindSet | undefined
     ) {
+        if (this.isFinished) {
+            return;
+        }
         // If the tile is not ready for display, or if it has become invisible while being loaded,
         // for example by moving the camera, the tile is not finished and its geometry is not
         // created. This is an optimization for fast camera movements and zooms.
         const tile = this.tile;
         const decodedTile = this.m_decodedTile;
         this.m_decodedTile = undefined;
+        // TODO: Entire block could be moved to update method
         if (decodedTile === undefined || tile.disposed || !tile.isVisible) {
+            // TODO: Should we clearTimer here?
+            if (this.m_timeout !== undefined) {
+                clearTimeout(this.m_timeout);
+            }
+            // TODO: Should we dispose tile here?
+            //if (!tile.isVisible) {
+            //    tile.mapView.visibleTileSet.disposeTile(tile);
+            //}
             this.finish();
+            return;
+        }
+        // TODO: This should be leaved here if we decide to leave above code block in
+        // prepareForRender() then isLoading will not be checked in update() call.
+        if (this.isLoading) {
             return;
         }
         this.m_timeout = setTimeout(() => {
@@ -275,6 +321,12 @@ export class SimpleTileGeometryLoader implements TileGeometryLoader {
                 this.finish();
                 return;
             }
+            // TODO: We should ignore disposed tile here, wright?
+            if (tile.disposed) {
+                this.finish();
+                return;
+            }
+
             let now = 0;
             if (stats.enabled) {
                 now = PerformanceTimer.now();
@@ -283,6 +335,7 @@ export class SimpleTileGeometryLoader implements TileGeometryLoader {
             const geometryCreator = TileGeometryCreator.instance;
 
             tile.clear();
+            // Set up techniques which should be processed.
             geometryCreator.initDecodedTile(decodedTile, enabledKinds, disabledKinds);
 
             geometryCreator.createAllGeometries(tile, decodedTile);
@@ -319,5 +372,74 @@ export class SimpleTileGeometryLoader implements TileGeometryLoader {
             this.finish();
             tile.dataSource.requestUpdate();
         }, 0);
+    }
+
+    /**
+     * Compare enabled and disabled geometry kinds with currently set.
+     *
+     * Method compares input sets with recently used geometry kinds in performance wise
+     * manner, taking special care of undefined and zero size sets.
+     *
+     * @param enabledKinds Set of geometry kinds to be displayed or undefined.
+     * @param disabledKinds Set of geometry kinds that won't be rendered.
+     * @return `true` only if sets are logically equal, meaning that undefined and empty sets
+     * may result in same geometry (techniques kind) beeing rendered.
+     */
+    private compareGeometryKinds(
+        enabledKinds: GeometryKindSet | undefined,
+        disabledKinds: GeometryKindSet | undefined
+    ): boolean {
+        const enabledSame = this.m_enabledKinds === enabledKinds;
+        const disabledSame = this.m_disabledKinds === disabledKinds;
+        // Same references, no need to compare.
+        if (enabledSame && disabledSame) {
+            console.log("Update compare - all the same");
+            return true;
+        }
+        const enabledEmpty =
+            (this.m_enabledKinds === undefined || this.m_enabledKinds.size === 0) &&
+            (enabledKinds === undefined || enabledKinds.size === 0);
+        const disabledEmpty =
+            (this.m_disabledKinds === undefined || this.m_disabledKinds.size === 0) &&
+            (disabledKinds === undefined || disabledKinds.size === 0);
+
+        // We deal only with empty, the same or undefined sets - fast return, no need to compare.
+        if (
+            (enabledEmpty && disabledEmpty) ||
+            (enabledSame && disabledEmpty) ||
+            (disabledSame && enabledEmpty)
+        ) {
+            console.log("Update compare - same or empty");
+            return true;
+        }
+        // It is enough that one the the sets are different, try to spot difference otherwise
+        // return true. Compare only non-empty sets.
+        if (!enabledEmpty) {
+            // If one set undefined then other must be non-empty, for sure different.
+            if (enabledKinds === undefined || this.m_enabledKinds === undefined) {
+                console.log("Update compare enabled - one defined other not");
+                return false;
+            }
+            // Both defined and non-empty, compare the sets.
+            else if (!enabledKinds.has(this.m_enabledKinds)) {
+                console.log("Update compare enabled - different sets");
+                return false;
+            }
+        }
+        if (!disabledEmpty) {
+            // One set defined and non-empty other undefined, for sure different.
+            if (disabledKinds === undefined || this.m_disabledKinds === undefined) {
+                console.log("Update compare enabled - one defined other not");
+                return false;
+            }
+            // Both defined and non-empty, compare the sets.
+            else if (!disabledKinds.has(this.m_disabledKinds)) {
+                console.log("Update compare disabled - different sets");
+                return false;
+            }
+        }
+        // No difference found.
+        console.log("Update compare - no difference found");
+        return true;
     }
 }
