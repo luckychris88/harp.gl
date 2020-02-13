@@ -1744,10 +1744,10 @@ export class MapView extends THREE.EventDispatcher {
     /**
      * Returns 'true' if the phased loading is currently enabled.
      *
-     * @default true.
+     * @default `false`.
      */
     get phasedLoadingEnabled(): boolean {
-        return this.m_options.enablePhasedLoading !== false;
+        return this.m_options.enablePhasedLoading === true;
     }
 
     /**
